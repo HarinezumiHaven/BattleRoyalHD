@@ -81,9 +81,11 @@ public class QuickDeathManager {
 
         World world = center.getWorld();
         int minY = world.getMinHeight();
+        int borderRadius = gameManager.getSettings().getOvertimeBorderDiameter() / 2;
 
         BukkitRunnable task = new BukkitRunnable() {
             int currentY = minY;
+            int blocksRisen = 0;
 
             @Override
             public void run() {
@@ -97,21 +99,91 @@ public class QuickDeathManager {
                     return;
                 }
 
-                int radius = 500;
-                for (int x = -radius; x <= radius; x++) {
-                    for (int z = -radius; z <= radius; z++) {
+                for (int x = -borderRadius; x <= borderRadius; x++) {
+                    for (int z = -borderRadius; z <= borderRadius; z++) {
+                        double distance = Math.sqrt(x * x + z * z);
+                        if (distance > borderRadius) continue;
+
                         Location loc = new Location(world, center.getX() + x, currentY, center.getZ() + z);
-                        if (loc.getBlock().getType() == Material.AIR || loc.getBlock().getType().name().contains("WATER")) {
+
+                        if (!loc.isChunkLoaded()) continue;
+
+                        if (loc.getBlock().getType() == Material.AIR) {
                             loc.getBlock().setType(Material.LAVA);
                         }
                     }
                 }
 
                 currentY++;
+                blocksRisen++;
+
+                if (blocksRisen >= 5) {
+                    blocksRisen = 0;
+                    cancel();
+
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            startLavaRisingContinue(center, world, currentY, borderRadius);
+                        }
+                    }.runTaskLater(plugin, 100L);
+                }
             }
         };
         quickDeathTask = task;
-        task.runTaskTimer(plugin, 0L, 20L);
+        task.runTaskTimer(plugin, 0L, 1L);
+    }
+
+    private void startLavaRisingContinue(Location center, World world, int startY, int borderRadius) {
+        BukkitRunnable task = new BukkitRunnable() {
+            int currentY = startY;
+            int blocksRisen = 0;
+
+            @Override
+            public void run() {
+                if (gameManager.getCurrentPhase() != GamePhase.OVERTIME) {
+                    cancel();
+                    return;
+                }
+
+                if (currentY > center.getY() + 100) {
+                    cancel();
+                    return;
+                }
+
+                for (int x = -borderRadius; x <= borderRadius; x++) {
+                    for (int z = -borderRadius; z <= borderRadius; z++) {
+                        double distance = Math.sqrt(x * x + z * z);
+                        if (distance > borderRadius) continue;
+
+                        Location loc = new Location(world, center.getX() + x, currentY, center.getZ() + z);
+
+                        if (!loc.isChunkLoaded()) continue;
+
+                        if (loc.getBlock().getType() == Material.AIR) {
+                            loc.getBlock().setType(Material.LAVA);
+                        }
+                    }
+                }
+
+                currentY++;
+                blocksRisen++;
+
+                if (blocksRisen >= 5) {
+                    blocksRisen = 0;
+                    cancel();
+
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            startLavaRisingContinue(center, world, currentY, borderRadius);
+                        }
+                    }.runTaskLater(plugin, 100L);
+                }
+            }
+        };
+        quickDeathTask = task;
+        task.runTaskTimer(plugin, 0L, 1L);
     }
 
     private void startArrowRain(Location center, int borderSize) {
@@ -213,7 +285,7 @@ public class QuickDeathManager {
             player.addPotionEffect(new PotionEffect(
                 PotionEffectType.HUNGER,
                 Integer.MAX_VALUE,
-                10,
+                30,
                 false,
                 false,
                 false
